@@ -12,7 +12,7 @@ import org.apache.spark.ml.tuning.{ParamGridBuilder, CrossValidator}
 import org.apache.spark.mllib.linalg.Vector
 
 
-case class Passenger(id: Int, survived: Int
+case class Passenger(id: Int, survived: Double
                      , Pclass: Int, Name: String
                      , Sex: String, Age: Int
                      , SibSp:Int, Parch: Int
@@ -41,7 +41,7 @@ object FeatureSelectorExample {
     val parsedData = data.map(line => {
       val p = line.split(SMART_CSV_SPLIT_REGEX,-1)
       //for((x,i) <- p.view.zipWithIndex) println("String #" + i + " is " + x)
-      Passenger(p(0).toInt, p(1).toInt, p(2).toInt, p(3).trim, p(4).trim, safeInt(p(5)),
+      Passenger(p(0).toInt, p(1).toDouble, p(2).toInt, p(3).trim, p(4).trim, safeInt(p(5)),
         p(6).toInt, p(7).toInt, p(9).toDouble, p(11))
     })
     parsedData.toDF
@@ -64,14 +64,14 @@ object FeatureSelectorExample {
                           .setInputCol("Embarked")
                           .setOutputCol("EmbarkedIndex")
 
-    val featureColumns = List("survived", "PclassIndex"
+    val featureColumns = List("PclassIndex"
       , "SexIndex", "Age", "SibSp", "Parch"
       , "Fare", "EmbarkedIndex")
     val assembler = new VectorAssembler()
                     .setInputCols(featureColumns.toArray)
                     .setOutputCol("features")
     val selector = new FeatureSelector()
-                   .setOutputCols(Array("features", "survived"))
+                   .setOutputCols(Array("features", "label")) //TODO: add selector and change label to survived
 
     val lr = new LogisticRegression()
       .setMaxIter(10)
@@ -89,7 +89,7 @@ object FeatureSelectorExample {
       .setEstimatorParamMaps(paramGrid)
       .setNumFolds(3)
 
-    val cvModel = crossval.fit(dataset)
+    val cvModel = crossval.fit(dataset.withColumnRenamed("survived", "label"))
 
     sc.stop()
   }

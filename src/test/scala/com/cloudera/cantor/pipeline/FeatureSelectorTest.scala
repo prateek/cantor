@@ -1,5 +1,6 @@
 package com.cloudera.cantor.pipeline
 
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.{sql, SparkConf, SparkContext}
 import org.apache.spark.sql.{Row, DataFrame, SQLContext}
 import org.scalatest.{BeforeAndAfter, FunSuite}
@@ -27,6 +28,23 @@ class FeatureSelectorTest
       ("0", 1, 2, 3, 4),
       ("5", 6, 7, 8, 9)
     )).toDF("id", "a", "b", "c", "d")
+  }
+
+  test("FeatureSelector transformSchema") {
+    val selector = new FeatureSelector()
+      .setOutputCols(Array("id"))
+
+    val empty = Array[StructField]()
+    val emptySchema = new StructType(empty)
+    evaluating {selector.transformSchema(emptySchema)} should produce [IllegalArgumentException]
+
+    val singleField = new StructField("id", StringType)
+    val singleSchema = new StructType(Array(singleField))
+    val transformedSchema = selector.transformSchema(singleSchema)
+    transformedSchema.fields should have length 1
+    transformedSchema.fields(0).name should be ("id")
+
+    //TODO: finish creating this test
   }
 
   test("FeatureSelector") {
