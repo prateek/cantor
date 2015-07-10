@@ -1,17 +1,51 @@
 package com.cloudera.cantor
 
+import akka.actor.ScalaActorRef
+import com.cloudera.cantor.pipeline.FeatureSelector
+import org.apache.spark.ml.feature.{VectorAssembler, StringIndexer}
+import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.mllib.tree.DecisionTree
-import org.apache.spark.mllib.tree.model.DecisionTreeModel
-import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.ml.Pipeline
+import org.apache.spark.ml.classification.LogisticRegression
+import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator
+import org.apache.spark.ml.tuning.{ParamGridBuilder, CrossValidator}
+import org.apache.spark.mllib.linalg.Vector
 
 
+case class Passenger(id: Int, survived: Int
+                     , Pclass: Int, Name: String
+                     , Sex: String, Age: Int
+                     , SibSp:Int, Parch: Int
+                     , Fare: Double, Embarked: String)
 // Based on the examples from
 // https://spark.apache.org/docs/1.0.1/mllib-decision-tree.html#examples
 // https://spark.apache.org/docs/latest/ml-guide.html#example-model-selection-via-cross-validation
 
 object FeatureSelectorExample {
+
+  val SMART_CSV_SPLIT_REGEX = ",(?=([^\"]*\"[^\"]*\")*[^\"]*$)";
+  def safeInt(x: String)={
+    try {
+      x.toInt
+    } catch {
+      case e: Exception => 0
+    }
+  }
+
+  def loadData(sc: SparkContext): DataFrame ={
+    val sqlContext = new SQLContext(sc)
+    // used to implicitly convert RDD -> DF
+    import sqlContext.implicits._
+    // Load and parse the data file
+    val data = sc.textFile("file:/Users/prungta/trash/cantor/src/main/resources/sample-data/titanic-train.csv")
+    val parsedData = data.map(line => {
+      val p = line.split(SMART_CSV_SPLIT_REGEX,-1)
+      //for((x,i) <- p.view.zipWithIndex) println("String #" + i + " is " + x)
+      Passenger(p(0).toInt, p(1).toInt, p(2).toInt, p(3).trim, p(4).trim, safeInt(p(5)),
+        p(6).toInt, p(7).toInt, p(9).toDouble, p(11))
+    })
+    parsedData.toDF
+  }
 
   def main(args : Array[String]) {
     val conf = new SparkConf()
@@ -19,36 +53,43 @@ object FeatureSelectorExample {
       .setMaster("local")
     val sc = new SparkContext(conf)
 
-    // Load and parse the data file
-    val data = sc.textFile("file:/Users/prungta/trash/cantor/src/main/resources/sample-data/sample_tree_data.csv")
-    val parsedData = data.map { line =>
-      val parts = line.split(',').map(_.toDouble)
-      LabeledPoint(parts(0), Vectors.dense(parts.tail))
-    }
+    val dataset = loadData(sc)
+    val pClassIndexer = new StringIndexer()
+                        .setInputCol("Pclass")
+                        .setOutputCol("PclassIndex")
+    val SexIndexer = new StringIndexer()
+                     .setInputCol("Sex")
+                     .setOutputCol("SexIndex")
+    val EmbarkedIndexer = new StringIndexer()
+                          .setInputCol("Embarked")
+                          .setOutputCol("EmbarkedIndex")
 
-    // Split the data into training and test sets (30% held out for testing)
-    val splits = parsedData.randomSplit(Array(0.7, 0.3))
-    val (trainingData, testData) = (splits(0), splits(1))
+    val featureColumns = List("survived", "PclassIndex"
+      , "SexIndex", "Age", "SibSp", "Parch"
+      , "Fare", "EmbarkedIndex")
+    val assembler = new VectorAssembler()
+                    .setInputCols(featureColumns.toArray)
+                    .setOutputCol("features")
+    val selector = new FeatureSelector()
+                   .setOutputCols(Array("features", "survived"))
 
-    // Train a DecisionTree model.
-    //  Empty categoricalFeaturesInfo indicates all features are continuous.
-    val numClasses = 2
-    val categoricalFeaturesInfo = Map[Int, Int]()
-    val impurity = "gini"
-    val maxDepth = 5
-    val maxBins = 32
+    val lr = new LogisticRegression()
+      .setMaxIter(10)
 
-    val model = DecisionTree.trainClassifier(trainingData, numClasses, categoricalFeaturesInfo,
-      impurity, maxDepth, maxBins)
+    val pipeline = new Pipeline()
+      .setStages(Array(pClassIndexer, SexIndexer, EmbarkedIndexer, assembler, selector, lr))
 
-    // Evaluate model on test instances and compute test error
-    val labelAndPreds = testData.map { point =>
-      val prediction = model.predict(point.features)
-      (point.label, prediction)
-    }
-    val testErr = labelAndPreds.filter(r => r._1 != r._2).count.toDouble / testData.count()
-    println("Test Error = " + testErr)
-    println("Learned classification tree model:\n" + model.toDebugString)
+    val paramGrid = new ParamGridBuilder()
+      .addGrid(lr.regParam, Array(0.1, 0.01))
+      .build()
+
+    val crossval = new CrossValidator()
+      .setEstimator(pipeline)
+      .setEvaluator(new BinaryClassificationEvaluator)
+      .setEstimatorParamMaps(paramGrid)
+      .setNumFolds(3)
+
+    val cvModel = crossval.fit(dataset)
 
     sc.stop()
   }
