@@ -17,9 +17,6 @@ case class Passenger(id: Int, survived: Double
                      , Sex: String, Age: Int
                      , SibSp:Int, Parch: Int
                      , Fare: Double, Embarked: String)
-// Based on the examples from
-// https://spark.apache.org/docs/1.0.1/mllib-decision-tree.html#examples
-// https://spark.apache.org/docs/latest/ml-guide.html#example-model-selection-via-cross-validation
 
 object FeatureSelectorExample {
 
@@ -55,17 +52,17 @@ object FeatureSelectorExample {
 
     val dataset = loadData(sc)
     val pClassIndexer = new StringIndexer()
-                        .setInputCol("Pclass")
-                        .setOutputCol("PclassIndex")
+      .setInputCol("Pclass")
+      .setOutputCol("PclassIndex")
     val SexIndexer = new StringIndexer()
-                     .setInputCol("Sex")
-                     .setOutputCol("SexIndex")
+      .setInputCol("Sex")
+      .setOutputCol("SexIndex")
     val EmbarkedIndexer = new StringIndexer()
-                          .setInputCol("Embarked")
-                          .setOutputCol("EmbarkedIndex")
+      .setInputCol("Embarked")
+      .setOutputCol("EmbarkedIndex")
 
-    def featureCombinations(combineList: Array[String], includeList: Array[String], k: Int): Array[Array[String]] ={
-      combineList.combinations(k).toArray.map(_.toArray ++ includeList)
+    def featureCombinations(combineList: Array[String], k: Int): Array[Array[String]] = {
+      combineList.combinations(k).toArray.map(_.toArray) // ++ includeList)
     }
 
     val featureColumns = Array("PclassIndex"
@@ -73,10 +70,8 @@ object FeatureSelectorExample {
       , "Fare", "EmbarkedIndex")
 
     val assembler = new VectorAssembler()
-                    .setInputCols(featureColumns)
-                    .setOutputCol("features")
-    val selector = new FeatureSelector()
-                   .setOutputCols(Array("features", "label")) //TODO: change label to survived
+      .setInputCols(featureColumns)
+      .setOutputCol("features")
 
     val lr = new LogisticRegression()
       .setMaxIter(10)
@@ -86,7 +81,7 @@ object FeatureSelectorExample {
 
     val paramGrid = new ParamGridBuilder()
       .addGrid(lr.regParam, Array(0.1, 0.01))
-      .addGrid(assembler.inputCols, featureCombinations(featureColumns, Array("label"), 3))
+      .addGrid(assembler.inputCols, featureCombinations(featureColumns, featureColumns.length-1))
       .build()
 
     val crossval = new CrossValidator()
@@ -96,8 +91,8 @@ object FeatureSelectorExample {
       .setNumFolds(3)
 
     val cvModel = crossval.fit(dataset.withColumnRenamed("survived", "label"))
-
+    // TODO: print best params
+    // println("Best params ")
     sc.stop()
   }
-
 }
