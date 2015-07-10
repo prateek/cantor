@@ -64,23 +64,29 @@ object FeatureSelectorExample {
                           .setInputCol("Embarked")
                           .setOutputCol("EmbarkedIndex")
 
-    val featureColumns = List("PclassIndex"
+    def featureCombinations(combineList: Array[String], includeList: Array[String], k: Int): Array[Array[String]] ={
+      combineList.combinations(k).toArray.map(_.toArray ++ includeList)
+    }
+
+    val featureColumns = Array("PclassIndex"
       , "SexIndex", "Age", "SibSp", "Parch"
       , "Fare", "EmbarkedIndex")
+
     val assembler = new VectorAssembler()
-                    .setInputCols(featureColumns.toArray)
+                    .setInputCols(featureColumns)
                     .setOutputCol("features")
     val selector = new FeatureSelector()
-                   .setOutputCols(Array("features", "label")) //TODO: add selector and change label to survived
+                   .setOutputCols(Array("features", "label")) //TODO: change label to survived
 
     val lr = new LogisticRegression()
       .setMaxIter(10)
 
     val pipeline = new Pipeline()
-      .setStages(Array(pClassIndexer, SexIndexer, EmbarkedIndexer, assembler, selector, lr))
+      .setStages(Array(pClassIndexer, SexIndexer, EmbarkedIndexer, assembler, lr))
 
     val paramGrid = new ParamGridBuilder()
       .addGrid(lr.regParam, Array(0.1, 0.01))
+      .addGrid(assembler.inputCols, featureCombinations(featureColumns, Array("label"), 3))
       .build()
 
     val crossval = new CrossValidator()

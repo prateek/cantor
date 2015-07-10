@@ -19,7 +19,6 @@ class FeatureSelector(override val uid: String)
 
   override def transform(dataset: DataFrame): DataFrame = {
     $(outputCols) match {
-      case Array(head) => dataset.select(head)
       case Array(head, rest @ _*) => dataset.select(head, rest:_*)
       case _ => dataset
     }
@@ -32,6 +31,6 @@ class FeatureSelector(override val uid: String)
         throw new IllegalArgumentException(s"Output column $colName does not exist.")
       }
     })
-    new StructType(schema.fields.filterNot(field => outputColNames.contains(field.name)))
+    new StructType(schema.fields.filter(field => outputColNames.contains(field.name)))
   }
 }

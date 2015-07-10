@@ -41,10 +41,15 @@ class FeatureSelectorTest
     val singleField = new StructField("id", StringType)
     val singleSchema = new StructType(Array(singleField))
     val transformedSchema = selector.transformSchema(singleSchema)
+    transformedSchema.fields.foreach(println)
     transformedSchema.fields should have length 1
     transformedSchema.fields(0).name should be ("id")
 
-    //TODO: finish creating this test
+    val secondField = new StructField("otherName", StringType)
+    val doubleSchema = new StructType(Array(singleField, secondField))
+    val doubleTransformedSchema = selector.transformSchema(doubleSchema)
+    doubleTransformedSchema.fields should have length 1
+    doubleTransformedSchema.fields(0).name should be ("id")
   }
 
   test("FeatureSelector") {
